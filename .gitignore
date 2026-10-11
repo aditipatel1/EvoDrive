@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# long per-generation logs from experiments.py (results are in the CSVs)
+train_log.txt
+
+# scratch output from a plain "python3 train.py" in the main folder;
+# the results that matter live in runs/
+/best_network.npy
+/history.csv

@@ -1,0 +1,8 @@
+{
+  "generations": 45,
+  "seed": 3,
+  "tracks_per_gen": 2,
+  "population": 50,
+  "mutation_rate": 0.1,
+  "mutation_strength": 0.4
+}

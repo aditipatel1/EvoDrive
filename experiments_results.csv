@@ -1,0 +1,13 @@
+setting,seed,tracks_per_gen,mutation_rate,mutation_strength,normal_completed,normal_laps,stress_completed,stress_laps
+baseline,1,2,0.1,0.4,0.97,1.9465,0.83,1.687
+baseline,2,2,0.1,0.4,0.97,1.9416,0.72,1.5281
+baseline,3,2,0.1,0.4,0.96,1.9269,0.73,1.4846
+tracks4,1,4,0.1,0.4,0.97,1.9465,0.7,1.4404
+tracks4,2,4,0.1,0.4,0.97,1.9415,0.82,1.6511
+tracks4,3,4,0.1,0.4,0.96,1.9246,0.81,1.6263
+low_mutation,1,2,0.05,0.2,0.93,1.8838,0.62,1.3401
+low_mutation,2,2,0.05,0.2,1.0,1.9957,0.19,0.6348
+low_mutation,3,2,0.05,0.2,0.9,1.8429,0.48,1.1699
+high_mutation,1,2,0.2,0.8,0.91,1.8473,0.22,0.661
+high_mutation,2,2,0.2,0.8,0.99,1.9708,0.23,0.6937
+high_mutation,3,2,0.2,0.8,1.0,1.9903,0.43,1.0906

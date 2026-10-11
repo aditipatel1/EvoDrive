@@ -1,0 +1,6 @@
+# EvoDrive dependencies. Install with:  python3 -m pip install -r requirements.txt
+# Tested with Python 3.13, numpy 2.5.3, pygame 2.6.1, matplotlib 3.11.2, pillow 12.3.0
+numpy>=1.25
+pygame>=2.5
+matplotlib>=3.8     # plot_history.py
+pillow>=9           # record_gif.py
