@@ -14,15 +14,12 @@ import numpy as np
 import pygame
 
 from car import Car
-from network import NeuralNetwork
 from track import generate_track, WIDTH, HEIGHT
-from train import network_driver
+from train import network_driver, load_network
 
 
 def load_driver(path):
-    net = NeuralNetwork()
-    net.set_vector(np.load(path))
-    return network_driver(net)
+    return network_driver(load_network(path))   # arcade or grip, from the file
 
 
 def main(path="best_network.npy", max_frames=None):
@@ -30,7 +27,7 @@ def main(path="best_network.npy", max_frames=None):
     driver = load_driver(path)
     rng = np.random.default_rng()
     track = generate_track(rng)
-    car = Car(track)
+    car = Car(track, grip=driver.grip)
     show_rays = True
 
     pygame.init()
@@ -50,20 +47,22 @@ def main(path="best_network.npy", max_frames=None):
                     running = False
                 elif event.key == pygame.K_n:
                     track = generate_track(rng)
-                    car = Car(track)
+                    car = Car(track, grip=driver.grip)
                 elif event.key == pygame.K_r:
-                    car = Car(track)
+                    car = Car(track, grip=driver.grip)
                 elif event.key == pygame.K_s:
                     show_rays = not show_rays
 
-        readings = car.sense()                       # SENSE
+        obs = car.observe()                          # SENSE
+        readings = obs[:5]
         if not car.crashed:
-            car.update(*driver(readings))            # THINK + ACT
+            car.update(*driver(obs))                 # THINK + ACT
 
         screen.fill((30, 30, 35))
         track.draw(screen)
         car.draw(screen, readings=readings if show_rays else None)
-        lines = [f"laps: {max(car.laps, 0):.2f}   speed: {car.speed:.1f}",
+        lines = [f"laps: {max(car.laps, 0):.2f}   speed: {car.speed * 54:.0f} km/h"
+                 + ("   SLIDING" if car.sliding else ""),
                  "N = new track   R = restart   S = rays   ESC = quit"]
         if car.crashed:
             lines.append("CRASHED - press R or N")

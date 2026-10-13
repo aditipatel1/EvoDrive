@@ -21,9 +21,8 @@ import pygame
 from PIL import Image
 
 from car import Car
-from network import NeuralNetwork
 from track import generate_track, WIDTH, HEIGHT
-from train import network_driver, MAX_FRAMES
+from train import network_driver, load_network, MAX_FRAMES, GRIP_MAX_FRAMES
 
 FRAME_STEP = 3          # keep every 3rd simulation frame
 GIF_WIDTH = 640         # output size (keeps the file small)
@@ -59,9 +58,10 @@ def find_demo_track(driver, half_width, wobble, laps=1.0, tries=30):
     rng = np.random.default_rng(TRACK_SEED)
     for _ in range(tries):
         track = generate_track(rng, half_width=half_width, wobble=wobble)
-        car = Car(track)
-        while not car.crashed and car.frames < MAX_FRAMES and car.laps < laps:
-            car.update(*driver(car.sense()))
+        car = Car(track, grip=driver.grip)
+        limit = GRIP_MAX_FRAMES if driver.grip else MAX_FRAMES
+        while not car.crashed and car.frames < limit and car.laps < laps:
+            car.update(*driver(car.observe()))
         if car.laps >= laps:
             return track
     raise SystemExit("Driver didn't finish any of the demo tracks - try another --file.")
@@ -69,20 +69,20 @@ def find_demo_track(driver, half_width, wobble, laps=1.0, tries=30):
 
 def main(path, out, stress):
     hw, wb = (18, 4.0) if stress else (22, 3.0)
-    net = NeuralNetwork()
-    net.set_vector(np.load(path))
-    driver = network_driver(net)
+    driver = network_driver(load_network(path))
     track = find_demo_track(driver, hw, wb)
 
     pygame.init()
     screen = pygame.Surface((WIDTH, HEIGHT))
     font = pygame.font.SysFont("consolas", 22)
-    car = Car(track)
+    car = Car(track, grip=driver.grip)
     frames = []
     palette = make_palette()
-    while not car.crashed and car.laps < 1.0 and car.frames < MAX_FRAMES:
-        readings = car.sense()
-        car.update(*driver(readings))
+    limit = GRIP_MAX_FRAMES if driver.grip else MAX_FRAMES
+    while not car.crashed and car.laps < 1.0 and car.frames < limit:
+        obs = car.observe()
+        readings = obs[:5]
+        car.update(*driver(obs))
         if car.frames % FRAME_STEP:
             continue
         screen.fill(BACKGROUND)

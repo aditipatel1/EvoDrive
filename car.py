@@ -19,10 +19,21 @@ MAX_SPEED = 5.0
 MIN_SPEED = 0.5
 TURN_RATE = 4.0            # degrees per frame at full steer
 
+# ---- grip mode (optional, realistic cornering) ----
+# Scale: 4 px = 1 m and 60 frames = 1 s, so 1 g = 9.81 m/s^2 is this many px/frame^2:
+G = 9.81 * 4 / 3600
+GRIP_G = 1.5               # most sideways acceleration the tyres can hold
+ACCEL_G = 0.6              # full throttle
+BRAKE_G = 1.4              # full brake
+
 
 class Car:
-    def __init__(self, track):
+    def __init__(self, track, grip=False):
+        """grip=False: the original arcade physics (any turn at any speed).
+        grip=True: tyres hold at most GRIP_G sideways; above that the car
+        understeers (turns less than asked) and runs wide."""
         self.track = track
+        self.grip = grip
         self.reset()
 
     def reset(self):
@@ -34,6 +45,7 @@ class Car:
         self.progress = 0.0      # pixels driven ALONG the track (signed)
         self.best_progress = 0.0
         self.frames_since_best = 0
+        self.sliding = False     # grip mode: asked for more turn than the tyres allow
 
     @property
     def laps(self):
@@ -65,6 +77,15 @@ class Car:
         t = np.where(hit, t, SENSOR_RANGE)
         return np.minimum(t.min(axis=1), SENSOR_RANGE)  # (5,)
 
+    def observe(self):
+        """What the driver gets each frame. Arcade: the 5 sensor distances.
+        Grip: the 5 distances plus the car's speed, scaled so top speed reads
+        like a full-range sensor (a grip driver must know how fast it is going)."""
+        readings = self.sense()
+        if self.grip:
+            return np.append(readings, self.speed / MAX_SPEED * SENSOR_RANGE)
+        return readings
+
     def distance_to_wall(self):
         """Shortest distance from the car's centre to any wall segment."""
         seg = self.track.segments
@@ -82,8 +103,18 @@ class Car:
             return
         steer = max(-1.0, min(1.0, float(steer)))
         throttle = max(-1.0, min(1.0, float(throttle)))
-        self.angle += steer * TURN_RATE
-        self.speed = max(MIN_SPEED, min(MAX_SPEED, self.speed + throttle * 0.1))
+        if self.grip:
+            # turning at rate w while moving at speed v needs v * w sideways
+            # acceleration; the tyres supply at most GRIP_G of it
+            want = math.radians(steer * TURN_RATE)
+            limit = GRIP_G * G / max(self.speed, 1e-6)
+            self.sliding = abs(want) > limit
+            self.angle += math.degrees(max(-limit, min(limit, want)))
+            accel = throttle * (ACCEL_G if throttle > 0 else BRAKE_G) * G
+            self.speed = max(MIN_SPEED, min(MAX_SPEED, self.speed + accel))
+        else:
+            self.angle += steer * TURN_RATE
+            self.speed = max(MIN_SPEED, min(MAX_SPEED, self.speed + throttle * 0.1))
         a = math.radians(self.angle)
         self.x += math.cos(a) * self.speed
         self.y += math.sin(a) * self.speed
@@ -133,7 +164,7 @@ def rule_based_driver(readings):
     """Your stage-1 hand-written driver, unchanged: steer toward the side
     with more open space, slow down when something is close ahead.
     It's the baseline the evolved network has to beat (see compare.py later)."""
-    far_left, left, front, right, far_right = readings
+    far_left, left, front, right, far_right = readings[:5]
     steer = ((right + far_right) - (left + far_left)) / (2 * SENSOR_RANGE)
     steer = max(-1, min(1, steer * 3))
     throttle = 1 if front > 100 else -1

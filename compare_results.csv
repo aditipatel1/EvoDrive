@@ -1,0 +1,5 @@
+driver,completed,mean_laps,beats_rule_based
+rule-based,0.27,0.679059433870668,
+evolved (runs_grip/seed1/best_network.npy),0.66,1.3339888521676975,0.59
+evolved (runs_grip/seed2/best_network.npy),0.66,1.3548049200406953,0.61
+evolved (runs_grip/seed3/best_network.npy),0.72,1.4240578265460118,0.65

@@ -18,6 +18,7 @@ Run:
     python3 train.py --window             # watch the first track each generation
     python3 train.py --seed 2 --generations 60 --tracks-per-gen 4 --out runs/seed2
     python3 train.py --mutation-rate 0.2 --mutation-strength 0.2 --out runs/mut_test
+    python3 train.py --grip --seed 1 --out runs_grip/seed1     # realistic cornering
 
 The settings of every run are saved to config.json in its --out folder,
 so you can always tell later how a result was produced.
@@ -39,6 +40,7 @@ POPULATION = 50
 GENERATIONS = 45
 TRACKS_PER_GEN = 2
 MAX_FRAMES = 1200      # time limit per track (20 s at 60 fps)
+GRIP_MAX_FRAMES = 3600 # grip mode: 60 s, since careful cornering is slower (~85 km/h average)
 MAX_LAPS = 2.0         # fitness cap; a car stops once it reaches this
 STALL_FRAMES = 120     # stop a car that makes no new progress for 2 s
 SUCCESS_LAPS = 1.0     # a track counts as "completed" after one full lap
@@ -48,24 +50,38 @@ VAL_TRACKS = 8
 
 def network_driver(net):
     """Turn a network into a driver: sensors in, (steer, throttle) out.
-    Sensor distances are divided by SENSOR_RANGE so inputs are 0..1."""
-    return lambda readings: net.forward(readings / SENSOR_RANGE)
+    Inputs are divided by SENSOR_RANGE so they are 0..1. A 6-input network
+    is a grip-mode driver (its 6th input is its speed), so its car uses grip
+    physics: the driver always races under the physics it was trained in."""
+    drive = lambda obs: net.forward(obs / SENSOR_RANGE)
+    drive.grip = net.shapes[0] == 6
+    return drive
 
 
-def simulate(track, drivers, max_frames=MAX_FRAMES, on_frame=None):
+def load_network(path):
+    """Load best_network.npy; 50 numbers = arcade driver, 56 = grip driver."""
+    return NeuralNetwork.from_vector(np.load(path))
+
+
+def simulate(track, drivers, max_frames=None, on_frame=None):
     """Drive every driver on `track` at the same time; return laps per driver.
+
+    Time limit: MAX_FRAMES (20 s) in arcade mode, GRIP_MAX_FRAMES (60 s) when
+    any driver uses grip physics, unless max_frames is given.
 
     A car stops when it crashes, reaches MAX_LAPS, or stalls. on_frame
     (optional) is called every frame with the list of cars, for drawing;
     if it returns False the run is aborted early.
     """
-    cars = [Car(track) for _ in drivers]
+    cars = [Car(track, grip=getattr(d, "grip", False)) for d in drivers]
+    if max_frames is None:
+        max_frames = GRIP_MAX_FRAMES if any(c.grip for c in cars) else MAX_FRAMES
     active = list(range(len(cars)))
     for _ in range(max_frames):
         still = []
         for i in active:
             car = cars[i]
-            car.update(*drivers[i](car.sense()))
+            car.update(*drivers[i](car.observe()))
             if not (car.crashed or car.laps >= MAX_LAPS
                     or car.frames_since_best >= STALL_FRAMES):
                 still.append(i)
@@ -112,15 +128,17 @@ def make_window_callback(track, generation):
 
 def train(generations=GENERATIONS, seed=1, tracks_per_gen=TRACKS_PER_GEN,
           population=POPULATION, window=False, out=".",
-          mutation_rate=MUTATION_RATE, mutation_strength=MUTATION_STRENGTH):
+          mutation_rate=MUTATION_RATE, mutation_strength=MUTATION_STRENGTH,
+          grip=False):
     os.makedirs(out, exist_ok=True)
     config = dict(generations=generations, seed=seed, tracks_per_gen=tracks_per_gen,
                   population=population, mutation_rate=mutation_rate,
-                  mutation_strength=mutation_strength)
+                  mutation_strength=mutation_strength,
+                  physics="grip" if grip else "arcade")
     with open(os.path.join(out, "config.json"), "w") as f:
         json.dump(config, f, indent=2)
     rng = np.random.default_rng(seed)
-    nets = [NeuralNetwork(rng=rng) for _ in range(population)]
+    nets = [NeuralNetwork(n_inputs=6 if grip else 5, rng=rng) for _ in range(population)]
     dnas = [n.to_vector() for n in nets]
     val = validation_tracks()
     best_val = (-1.0, -1.0)            # (success rate, mean laps)
@@ -128,7 +146,8 @@ def train(generations=GENERATIONS, seed=1, tracks_per_gen=TRACKS_PER_GEN,
 
     print(f"seed {seed}: {population} cars, {generations} generations, "
           f"{tracks_per_gen} training tracks/generation, "
-          f"mutation rate {mutation_rate}, strength {mutation_strength}")
+          f"mutation rate {mutation_rate}, strength {mutation_strength}, "
+          f"{'grip' if grip else 'arcade'} physics")
     print(" gen | train best | train mean | val laps | val done")
     try:
         for gen in range(1, generations + 1):
@@ -190,6 +209,8 @@ if __name__ == "__main__":
                    help="chance each of the 50 numbers is nudged (default 0.1)")
     p.add_argument("--mutation-strength", type=float, default=MUTATION_STRENGTH,
                    help="size of each nudge, std of the noise (default 0.4)")
+    p.add_argument("--grip", action="store_true",
+                   help="realistic cornering: tyres hold 1.5 g, so the car must brake")
     a = p.parse_args()
     train(a.generations, a.seed, a.tracks_per_gen, a.population, a.window, a.out,
-          a.mutation_rate, a.mutation_strength)
+          a.mutation_rate, a.mutation_strength, a.grip)

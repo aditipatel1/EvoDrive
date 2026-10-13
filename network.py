@@ -41,6 +41,18 @@ class NeuralNetwork:
         self.w2 = vec[i:i + n_hid * n_out].reshape(n_hid, n_out); i += n_hid * n_out
         self.b2 = vec[i:i + n_out].copy()
 
+    @classmethod
+    def from_vector(cls, vec, n_hidden=6, n_outputs=2):
+        """Rebuild a network from saved DNA. The input count is worked out from
+        the length: 50 numbers = 5 inputs (arcade), 56 = 6 inputs (grip mode)."""
+        vec = np.asarray(vec, dtype=float)
+        n_in, rem = divmod(len(vec) - n_hidden - n_hidden * n_outputs - n_outputs, n_hidden)
+        if rem or n_in < 1:
+            raise ValueError(f"{len(vec)} numbers don't fit a ?-{n_hidden}-{n_outputs} network")
+        net = cls(n_in, n_hidden, n_outputs, rng=np.random.default_rng(0))
+        net.set_vector(vec)
+        return net
+
     def num_parameters(self):
         return len(self.to_vector())
 

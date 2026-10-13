@@ -32,7 +32,6 @@ import numpy as np
 import train
 from car import rule_based_driver
 from compare import evaluate, TEST_SEED
-from network import NeuralNetwork
 from track import generate_track
 
 # name: settings passed to train.train()
@@ -86,8 +85,7 @@ def main(names, seeds, generations):
         print(f"{name}: {EXPERIMENTS[name]}")
         for seed in seeds:
             out = run_one(name, EXPERIMENTS[name], seed, generations)
-            net = NeuralNetwork()
-            net.set_vector(np.load(os.path.join(out, "best_network.npy")))
+            net = train.load_network(os.path.join(out, "best_network.npy"))
             row = dict(setting=name, seed=seed, **EXPERIMENTS[name])
             for test, tracks in test_tracks.items():
                 laps = evaluate(train.network_driver(net), tracks)

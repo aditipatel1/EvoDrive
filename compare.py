@@ -16,7 +16,10 @@ First train some seeds, e.g.:
     python3 train.py --seed 3 --out runs/seed3
 Then:
     python3 compare.py
+    python3 compare.py --runs runs_grip          # grip-mode drivers
 Results are printed and saved to compare_results.csv.
+The rule-based driver always races under the same physics as the evolved
+drivers being compared (arcade or grip), so the comparison stays fair.
 """
 import argparse
 import csv
@@ -26,9 +29,8 @@ import os
 import numpy as np
 
 from car import rule_based_driver
-from network import NeuralNetwork
 from track import generate_track
-from train import simulate, network_driver, SUCCESS_LAPS, VAL_SEED
+from train import simulate, network_driver, load_network, SUCCESS_LAPS, VAL_SEED
 
 TEST_SEED = 2024        # different from VAL_SEED (12345)
 N_TEST = 100
@@ -44,23 +46,31 @@ def main(files, n_test=N_TEST, half_width=22, wobble=3.0):
     if not files:
         raise SystemExit("No trained networks found. Train first, e.g.\n"
                          "  python3 train.py --seed 1 --out runs/seed1")
+    drivers = [network_driver(load_network(path)) for path in files]
+    kinds = {d.grip for d in drivers}
+    if len(kinds) > 1:
+        raise SystemExit("These files mix arcade and grip drivers; compare one kind at a time "
+                         "(e.g. --runs runs or --runs runs_grip).")
+    grip = kinds.pop()
+    baseline = lambda readings: rule_based_driver(readings)
+    baseline.grip = grip                      # same physics as the evolved drivers
+
     rng = np.random.default_rng(TEST_SEED)
     tracks = [generate_track(rng, half_width=half_width, wobble=wobble)
               for _ in range(n_test)]
     print(f"{n_test} fresh test tracks (seed {TEST_SEED}, "
           f"half_width={half_width}, wobble={wobble}); "
+          f"{'grip' if grip else 'arcade'} physics; "
           f"'completed' = at least {SUCCESS_LAPS:.0f} lap\n")
 
     rows = []
-    rb = evaluate(rule_based_driver, tracks)
+    rb = evaluate(baseline, tracks)
     rows.append(dict(driver="rule-based", completed=np.mean(rb >= SUCCESS_LAPS),
                      mean_laps=rb.mean(), beats_rule_based=""))
 
     evolved = []
-    for path in files:
-        net = NeuralNetwork()
-        net.set_vector(np.load(path))
-        ev = evaluate(network_driver(net), tracks)
+    for path, driver in zip(files, drivers):
+        ev = evaluate(driver, tracks)
         evolved.append(ev)
         # paired comparison: same track, who drove further?
         wins = np.mean(ev > rb + 1e-9)
@@ -98,6 +108,8 @@ if __name__ == "__main__":
     # stress test: narrower, bendier tracks than training (training uses 22, 3.0)
     p.add_argument("--half-width", type=float, default=22)
     p.add_argument("--wobble", type=float, default=3.0)
+    p.add_argument("--runs", default="runs",
+                   help="folder of training runs to compare (default runs; grip: runs_grip)")
     a = p.parse_args()
-    main(a.files or sorted(glob.glob(os.path.join("runs", "*", "best_network.npy"))),
+    main(a.files or sorted(glob.glob(os.path.join(a.runs, "*", "best_network.npy"))),
          a.n_test, a.half_width, a.wobble)

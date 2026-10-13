@@ -90,6 +90,25 @@ def _():
     return f"rule-based driver reached {car.laps:.2f} laps on test track"
 
 
+@check("grip mode: tyre limit, speed input, 56-number drivers")
+def _():
+    import math
+    import numpy as np
+    from track import generate_track
+    from car import Car, G, GRIP_G
+    from network import NeuralNetwork
+    track = generate_track(np.random.default_rng(0))
+    car = Car(track, grip=True)
+    car.speed = 5.0
+    car.update(1, 0)                                  # full steer at top speed
+    lateral = car.speed * math.radians(car.angle - track.start[2]) / G
+    assert car.sliding and abs(lateral - GRIP_G) < 1e-6, lateral
+    assert len(car.observe()) == 6 and len(Car(track).observe()) == 5
+    net = NeuralNetwork.from_vector(NeuralNetwork(n_inputs=6).to_vector())
+    assert net.shapes == (6, 6, 2) and net.num_parameters() == 56
+    return f"sideways force capped at {lateral:.2f} g"
+
+
 @check("evolution.py: elitism, mutation, crossover")
 def _():
     import numpy as np
